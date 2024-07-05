@@ -4,6 +4,7 @@ import path from "path"
 import { Dictionary } from "../types/Dictionary.js"
 import { RequestListenerAsync } from "../types/RequestListenerAsync.js"
 import { Route } from "../types/Route.js"
+import { Router } from "../types/Router.js"
 
 const API_LOG_TYPE = "API"
 
@@ -50,9 +51,11 @@ export class API {
                 logger.log(API_LOG_TYPE, `Loading route "${file}"...`)
 
                 const src = path.resolve(routesDir, file)
-                const route = (await import(src))[file.split(".")[0]] as Route
+                const router = (await import(src))[file.split(".")[0]] as Router
 
-                api.setRoute(route)
+                for (const route of router.routes) {
+                    api.setRoute({ ...route, endpoint: router.endpoint + route.endpoint })
+                }
             }
         }
         catch (err) {
