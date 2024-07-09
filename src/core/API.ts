@@ -1,7 +1,8 @@
 import { readdir } from "fs/promises"
-import { IncomingMessage, RequestListener, Server, ServerResponse, createServer } from "http"
+import { IncomingMessage, Server, ServerResponse, createServer } from "http"
 import path from "path"
 import { Dictionary } from "../types/Dictionary.js"
+import { RequestListener } from "../types/RequestListener.js"
 import { RequestListenerAsync } from "../types/RequestListenerAsync.js"
 import { Route } from "../types/Route.js"
 import { Router } from "../types/Router.js"
@@ -25,11 +26,28 @@ export class API {
             if (!url || !method) throw 400
 
             const controllerKey = this.getControllerKey(url, method)
-            const controller = this.controllers[controllerKey]
+            let controller = this.controllers[controllerKey]
+            let params: string[] | undefined
+
+            if (!controller) {
+                for (const path in this.controllers) {
+                    const pathRegex = new RegExp(path)
+                    const match = controllerKey.match(pathRegex)
+
+                    if (!match) continue
+
+                    controller = this.controllers[path]
+                    params = [...match].slice(1)
+
+                    if (params.includes("")) throw 400
+
+                    break
+                }
+            }
 
             if (!controller) throw 404
 
-            controller instanceof Promise ? await controller(req, res) : controller(req, res)
+            controller instanceof Promise ? await controller(req, res, params) : controller(req, res, params)
         }
         catch (err) {
             if (typeof err == "number") this.sendStatus(res, err)
@@ -39,6 +57,25 @@ export class API {
 
     private getControllerKey(endpoint: string, method: string) {
         return endpoint + "_" + method
+    }
+
+    private pathToRegex(path: string) {
+        const parameterGroup = "([^/]+)"
+        let regexPath = path
+        let i = regexPath.lastIndexOf(":")
+
+        while (i != -1) {
+            const end = regexPath.indexOf("/", i)
+            const substring = regexPath.substring(i, end == -1 ? regexPath.indexOf("_") : end)
+
+            regexPath = regexPath.replace(substring, parameterGroup)
+
+            i = regexPath.lastIndexOf(":")
+        }
+
+        regexPath = `^${regexPath}$`
+
+        return regexPath
     }
 
     public async loadRoutes(routesDir: string) {
@@ -85,6 +122,13 @@ export class API {
         return new Promise<T>(callback)
     }
 
+    public sendJson(res: ServerResponse, json: Object) {
+        res.setHeader("Content-Type", "application/json")
+        res.writeHead(200)
+        res.write(JSON.stringify(json))
+        res.end()
+    }
+
     public sendStatus(res: ServerResponse, status: number) {
         res.writeHead(status)
         res.end()
@@ -92,8 +136,9 @@ export class API {
 
     public setRoute({ endpoint, method, controller }: Route) {
         const controllerKey = this.getControllerKey(endpoint, method)
+        const path = endpoint.includes(":") ? this.pathToRegex(controllerKey) : controllerKey
 
-        this.controllers[controllerKey] = controller
+        this.controllers[path] = controller
     }
 
     public start(host: string, port: number, callback?: () => void) {

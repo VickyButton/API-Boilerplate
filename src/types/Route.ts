@@ -1,4 +1,5 @@
-import { RequestListener } from "http"
+
+import { RequestListener } from "./RequestListener.js"
 import { RequestListenerAsync } from "./RequestListenerAsync.js"
 
 export interface Route {
