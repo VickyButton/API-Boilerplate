@@ -1,1 +1,1 @@
-This is a simple baseplate API module used as a template for personal APIs
+This is a simple boilerplate API module used as a template for personal APIs
